@@ -1,4 +1,19 @@
-//FFFS - Fernando Ferraz File System :)
+/* FFFS - Fernando Ferraz File System :P
+ * Este file system tem o intuito de servir como um ambiente de aprendizado
+ * para o desenvolvimento de file systems sob linux VFS. Contribuições
+ * são bem vindas tendo em vista que este código pode servir para aprendizado
+ * de mais pessoas no futuro. Este File system segue como referência o
+ * código publicado no artigo "Creating Linux virtual filesystems" por Jonathan
+ * Corbet - http://lwn.net/Articles/57369/ (código disponível em
+ * https://gist.github.com/prashants/3496839)
+ *
+ * Funcionalidades (todas dummy :P):
+ *   /fibonacci:
+ *     - read_file(): calcula próximo fibonnaci para cada operação de leitura
+ *     no arquivo fibonacci.
+ *     - write_file(): verifica se valor passado é um numero fibonacci, caso
+ *     verdadeiro o valor é armazenado.
+*/
 
 #include <linux/kernel.h>
 #include <linux/init.h>
@@ -9,8 +24,10 @@
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Fernando Ferraz");
 
-#define FFFS_MAGIC 0xFF1234 // SEILA OQUE COLOCAR AQUI :P
+/* seguindo outros exemplos que vi, é só adicionar um valor aleatório. */
+#define FFFS_MAGIC 0xFF1234
 
+/* armazeno nesta struct as variaveis necessárias para calcular fibonacci. */
 struct fibonacci_counter {
   int fibonacci_index;
   int fibonacci_last;
@@ -23,44 +40,14 @@ static struct fibonacci_counter f_counter = {
   .fibonacci_current = 0,
 };
 
-static int calculate_next_fibonacci(struct fibonacci_counter *fibonacci_cnt);
-
-static int fffs_fill_super(struct super_block *sb, void *data, int silent);
-static void fffs_kill_sb(struct super_block *sb);
-
-static struct dentry *fffs_mount(struct file_system_type *fst,
-                                 int flags, const char *devname, void *data);
-
-static int fffs_open(struct inode *inode, struct file *filp);
-static ssize_t fffs_read_file(struct file *filp, char *buf,
-                              size_t count, loff_t *offset);
-static ssize_t fffs_write_file(struct file *filp, const char *buf,
-                               size_t count, loff_t *offset);
-static struct dentry *fffs_create_file (struct super_block *sb,
-                                        struct dentry *dir, const char *name);
-
-static struct inode *fffs_create_inode(struct super_block *sb, int mode);
-static int fffs_fill_super(struct super_block *sb, void *data, int silent);
-
-static struct file_operations fffs_file_ops = {
-    .open	= fffs_open,
-    .read 	= fffs_read_file,
-    .write      = fffs_write_file,
-};
-
-static struct file_system_type fffs_fs_type = {
-//  .owner 	= THIS_MODULE,
-  .name		= "fffs",
-  .mount	= fffs_mount,
-  .kill_sb	= fffs_kill_sb,
-};
-
+/* inicializando operações de super_block */
 static struct super_operations fffs_super_operations = {
-  .statfs		= simple_statfs,
+  .statfs       = simple_statfs,
   .drop_inode	= generic_delete_inode,
 };
 
-
+/* calcula fibonacci baseado nos valores contidos em fibonacci_counter.
+ * está sem otimização nenhuma, no caso eu só queria ver funcionando :P */
 static int calculate_next_fibonacci(struct fibonacci_counter *fibonacci_cnt) {
 
   int last_value = 0;
@@ -74,6 +61,7 @@ static int calculate_next_fibonacci(struct fibonacci_counter *fibonacci_cnt) {
 
     fibonacci_cnt->fibonacci_last = 0;
     fibonacci_cnt->fibonacci_current = 1;
+    fibonacci_cnt->fibonacci_index++;
     return_value = 1;
 
   } else {
@@ -84,21 +72,24 @@ static int calculate_next_fibonacci(struct fibonacci_counter *fibonacci_cnt) {
                                    fibonacci_cnt->fibonacci_last;
 
     fibonacci_cnt->fibonacci_last = last_value;
+    fibonacci_cnt->fibonacci_index++;
     return_value = fibonacci_cnt->fibonacci_current;
 
   }
 
-  fibonacci_cnt->fibonacci_index++;
-
   return return_value;
 }
 
+/* abre o arquivo, aqui eu só passo o conteudo armazenado no inode para a
+ * estrutura de arquivo */
 static int fffs_open(struct inode *inode, struct file *filp) {
 
   filp->private_data = inode->i_private;
   return 0;
 }
 
+/* disponivel para o usuário, lê um arquivo no file system (atualmente fixo
+ *para o meu gerador de fibonacci) */
 static ssize_t fffs_read_file(struct file *filp, char *buf,
                               size_t count, loff_t *offset) {
 
@@ -127,6 +118,8 @@ static ssize_t fffs_read_file(struct file *filp, char *buf,
   return count;
 }
 
+/* disponivel para o usuario, escreve em um arquivo no file system
+ *(atualmente fixo para o meu gerador de fibonacci) */
 static ssize_t fffs_write_file(struct file *filp, const char *buf,
                                size_t count, loff_t *offset) {
 
@@ -179,6 +172,29 @@ static ssize_t fffs_write_file(struct file *filp, const char *buf,
   return count;
 }
 
+/* não disponivel pra o usuario de file system, cria um novo inode para o meu
+ * file system. */
+static struct inode *fffs_create_inode(struct super_block *sb, int mode) {
+
+  struct inode *ret = new_inode(sb);
+
+  ret->i_mode = mode;
+  ret->i_uid = ret->i_gid = 0;
+  ret->i_blocks = 0;
+  ret->i_atime = ret->i_mtime = ret->i_ctime = CURRENT_TIME;
+
+  return ret;
+}
+
+/* inicializando struct contendo as operações de arquivo implementadas. */
+static struct file_operations fffs_file_ops = {
+    .open	= fffs_open,
+    .read 	= fffs_read_file,
+    .write      = fffs_write_file,
+};
+
+/* não disponivel para o usuario de file system, cria um novo arquivo no meu
+ * file system. */
 static struct dentry *fffs_create_file (struct super_block *sb,
                                         struct dentry *dir, const char *name) {
 
@@ -201,18 +217,8 @@ static struct dentry *fffs_create_file (struct super_block *sb,
 
 }
 
-static struct inode *fffs_create_inode(struct super_block *sb, int mode) {
-
-  struct inode *ret = new_inode(sb);
-
-  ret->i_mode = mode;
-  ret->i_uid = ret->i_gid = 0;
-  ret->i_blocks = 0;
-  ret->i_atime = ret->i_mtime = ret->i_ctime = CURRENT_TIME;
-
-  return ret;
-}
-
+/* chamada quando o file system é montado, preenche o super_block e incializa
+ * o inode e dentry do root */
 static int fffs_fill_super(struct super_block *sb, void *data, int silent) {
 
   struct inode *root;
@@ -235,19 +241,31 @@ static int fffs_fill_super(struct super_block *sb, void *data, int silent) {
   return 0;
 }
 
+/* assassino de superblocos :P */
 static void fffs_kill_sb(struct super_block *sb) {
   kill_litter_super(sb);
 }
 
+/* chamada quando o FS é montado. */
 static struct dentry *fffs_mount(struct file_system_type *fst,
                                  int flags, const char *devname, void *data) {
 
   return mount_bdev(fst, flags, devname, data, fffs_fill_super);
 }
 
+/* inicializando struct contendo as informações do meu file system. */
+static struct file_system_type fffs_fs_type = {
+//  .owner 	= THIS_MODULE,
+  .name		= "fffs",
+  .mount	= fffs_mount,
+  .kill_sb	= fffs_kill_sb,
+};
+
+/* chamada na inicialização do modulo */
 static int __init fffs_init(void) {
   return register_filesystem(&fffs_fs_type);
 }
 
+/* declarando a funcção de inicialização do lo de kernel */
 module_init(fffs_init)
 
