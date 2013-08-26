@@ -1,7 +1,5 @@
-FFFS
+FFFS - Fernando Ferraz File System :P
 ====
-
-* FFFS - Fernando Ferraz File System :P
 
 * Introdução
 
