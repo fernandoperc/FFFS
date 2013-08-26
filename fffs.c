@@ -252,7 +252,7 @@ static struct dentry *fffs_mount(struct file_system_type *fst,
   return mount_bdev(fst, flags, devname, data, fffs_fill_super);
 }
 
-/* inicializando struct contendo as informações do meu file system. */
+/* iniciali/zando struct contendo as informações do meu file system. */
 static struct file_system_type fffs_fs_type = {
 //  .owner 	= THIS_MODULE,
   .name		= "fffs",
