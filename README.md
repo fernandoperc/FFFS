@@ -3,6 +3,8 @@ FFFS
 
 * FFFS - Fernando Ferraz File System :P
 
+* Instruções
+
  Este file system tem o intuito de servir como um ambiente de aprendizado
  para o desenvolvimento de file systems sob linux VFS. Contribuições
  são bem vindas tendo em vista que este código pode servir para aprendizado
