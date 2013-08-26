@@ -42,7 +42,7 @@ static struct fibonacci_counter f_counter = {
 
 /* inicializando operações de super_block */
 static struct super_operations fffs_super_operations = {
-  .statfs       = simple_statfs,
+  .statfs		= simple_statfs,
   .drop_inode	= generic_delete_inode,
 };
 
@@ -61,7 +61,6 @@ static int calculate_next_fibonacci(struct fibonacci_counter *fibonacci_cnt) {
 
     fibonacci_cnt->fibonacci_last = 0;
     fibonacci_cnt->fibonacci_current = 1;
-    fibonacci_cnt->fibonacci_index++;
     return_value = 1;
 
   } else {
@@ -72,16 +71,16 @@ static int calculate_next_fibonacci(struct fibonacci_counter *fibonacci_cnt) {
                                    fibonacci_cnt->fibonacci_last;
 
     fibonacci_cnt->fibonacci_last = last_value;
-    fibonacci_cnt->fibonacci_index++;
+
     return_value = fibonacci_cnt->fibonacci_current;
 
   }
 
+  fibonacci_cnt->fibonacci_index++;
   return return_value;
 }
 
-/* abre o arquivo, aqui eu só passo o conteudo armazenado no inode para a
- * estrutura de arquivo */
+
 static int fffs_open(struct inode *inode, struct file *filp) {
 
   filp->private_data = inode->i_private;
