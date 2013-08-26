@@ -11,7 +11,7 @@ FFFS - Fernando Ferraz File System :P
  Corbet - http://lwn.net/Articles/57369/ (código disponível em
  https://gist.github.com/prashants/3496839).
 
-* Funcionalidades (todas dummy :P):
+* Funcionalidades (todas dummy :P)
   
   - arquivo /fibonacci:
      - read_file(): exibe próximo fibonacci para cada operação de leitura
@@ -20,7 +20,7 @@ FFFS - Fernando Ferraz File System :P
                    verdadeiro o valor é armazenado.
 
 
-* Instruções:
+* Instruções
   
   - criar dispositivo de loopback para montar o file system:
       - dd if=/dev/zero of=/home/mo806i/rep bs=1k count=4
