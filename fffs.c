@@ -50,28 +50,40 @@ struct fibonacci_counter {
   int fibonacci_current;
 };
 
-static struct fibonacci_counter f_counter;
-static struct fibonacci_counter f_counter2[50];
-//   .fibonacci_index = 0,
-//   .fibonacci_last = 0,
-//   .fibonacci_last2 = 0,
-//   .fibonacci_current = 0,
-//};
+static struct fibonacci_counter f_counter = {
+   .fibonacci_index = 0,
+   .fibonacci_last = 0,
+   .fibonacci_last2 = 0,
+   .fibonacci_current = 0,
+};
 
-//static int make_fibonacci_dir(struct super_block *sb,
-//                              struct inode* parent_inode,
-//                              int fibonacci_index, int current_number) {
+static int f_counter2[50];
 
-//  struct inode* inode;
 
-//  if (current_number == 0 and fibonacci_index == 0) {
-//    return 0;
-//  }
+static int calculate_next_fibonacci_2(int* fibonacci_array,
+                                      int value_to_go) {
 
-//  inode = fffs_create_inode(sb, S_IFDIR | 0777);
+  int current_index = 2;
+  fibonacci_array[0] = 0;
+  fibonacci_array[1] = 1;
 
-//  return 0;
-//}
+  if (value_to_go == 0) {
+    return 0;
+  } else if (value_to_go == 1) {
+    fibonacci_array[2] = 1;
+    return 2;
+  }
+
+  do {
+    current_index++;
+    fibonacci_array[current_index] = (fibonacci_array[current_index - 1] +
+                                      fibonacci_array[current_index - 2]);
+
+  } while (fibonacci_array[current_index] < value_to_go);
+
+  return current_index;
+}
+
 
 /* calcula fibonacci baseado nos valores contidos em fibonacci_counter.
  * está sem otimização nenhuma, no caso eu só queria ver funcionando :P */
@@ -223,12 +235,8 @@ struct inode * fffs_create_inode(struct super_block *sb, int mode) {
       inode->i_mode = mode;
       inode->i_uid = current->cred->fsuid;
       inode->i_gid = current->cred->fsgid;
-      //inode->i_blocks = 0;
       inode->i_atime = inode->i_mtime = inode->i_ctime = CURRENT_TIME;
-      //inode->i_ino = ++inode_number;
-      /* G: Voce esta usando o inode number que foi retornado nessa funcao. Apesar de nao ter nada de errado nisso,
-            isso ignora completamente o inode_number global do islenefs. Entao voce poderia te-lo apagado.
-           -> na verdade eu esqueci de acrescentar a linha acima, agora tem sentido a variável global */
+
       switch (mode & S_IFMT) {
         case S_IFREG:
           inode->i_op = &fffs_file_inode_operations;
@@ -237,7 +245,6 @@ struct inode * fffs_create_inode(struct super_block *sb, int mode) {
         case S_IFDIR:
           inode->i_op = &fffs_dir_inode_operations;
           inode->i_fop = &simple_dir_operations;
-          //inc_nlink(inode);
           break;
         }
     }
@@ -248,24 +255,26 @@ static struct dentry *fffs_create_dir (struct super_block *sb,
                                        struct dentry *parent,
                                        int mode,
                                        const char* name) {
-
   struct dentry *dentry;
   struct inode *inode;
   struct qstr qname;
-  //const char name[5];
-
-  //snprintf(&name, 5, "%d", fibonnaci_number);
 
   qname.name = name;
   qname.len = strlen (name);
   qname.hash = full_name_hash(name, qname.len);
   dentry = d_alloc(parent, &qname);
-  if (! dentry)
-    goto out;
+
+  if (!dentry) {
+      printk("!dentry - %s\n", name);
+      goto out;
+  }
 
   inode = fffs_create_inode(sb, mode);
-  if (! inode)
+
+  if (!inode) {
+    printk("!inode - %s\n", name);
     goto out_dput;
+  }
 
   d_add(dentry, inode);
   return dentry;
@@ -280,31 +289,34 @@ out:
 static void fffs_create_fibonnaci_dir(struct super_block *sb,
                                              struct dentry *parent,
                                              int mode,
-                                             int fibonacci_index,
-                                             int fibonnaci_number) {
+                                             int fibonnaci_index) {
 
-   char name[20];
+  char first_value[20];
+  char second_value[20];
+  struct dentry* dentry1;
+  struct dentry* dentry2;
 
-   if (fibonacci_index == 0 &&
-       (fibonnaci_number == 1 || fibonnaci_number == 0)) {
+  printk("fffs_create_fibonnaci_dir - %d\n", fibonnaci_index);
 
-       fffs_create_dir(sb, parent, mode, (const char*)"1");
-       fffs_create_dir(sb, parent, mode, (const char*)"0");
-    return;
+  if (fibonnaci_index < 2) {
+
+     printk("fibonnaci_index < 2\n - %d\n", fibonnaci_index);
+
+     fffs_create_dir(sb, parent, mode, (const char*)"1");
+     fffs_create_dir(sb, parent, mode, (const char*)"0");
+     return;
    }
 
-   snprintf((char*)&name, 20, "%d", fibonnaci_number);
-   fffs_create_dir(sb, parent, mode, (const char*)&name);
+   snprintf((char*)&first_value, 20, "%d", f_counter2[fibonnaci_index - 1]);
+   dentry1 = fffs_create_dir(sb, parent, mode, first_value);
 
-   fffs_create_dir(sb, parent, mode, (const char*) "1");
-   fffs_create_dir(sb, parent, mode, (const char*) "0");
+   snprintf((char*)&second_value, 20, "%d", f_counter2[fibonnaci_index - 2]);
+   dentry2 = fffs_create_dir(sb, parent, mode, second_value);
 
-
-
-//   fffs_create_fibonnaci_dir(*sb, *parent, mode, fibonacci_index - 1,
-//                             f_counter[fibonacci_index].fibonacci_current
-//                              - f_counter[fibonacci_index].fibonacci_last);
-
+   fffs_create_fibonnaci_dir(sb, dentry1, mode, fibonnaci_index - 1);
+   //printk("fffs_create_fibonnaci_dir - %d\n", fibonnaci_index - 1);
+   fffs_create_fibonnaci_dir(sb, dentry2, mode, fibonnaci_index - 2);
+   //printk("fffs_create_fibonnaci_dir - %d\n", fibonnaci_index - 2);
 }
 
 static int fffs_mkdir(struct inode * dir, struct dentry *dentry,
@@ -312,8 +324,8 @@ static int fffs_mkdir(struct inode * dir, struct dentry *dentry,
 
     struct inode *inode;
     char* name = (char*)dentry->d_name.name;
+    int fibonacci_index = 0;
     int* converted_value = (int*)kmalloc(sizeof(int), GFP_KERNEL);
-    *converted_value = 0;
 
     mode |= S_IFDIR;
 
@@ -327,15 +339,14 @@ static int fffs_mkdir(struct inode * dir, struct dentry *dentry,
         }
 
         d_instantiate(dentry, inode);
-        //dget(dentry);
         dir->i_mtime = dir->i_ctime = CURRENT_TIME;
-        //inc_nlink(dir);
-
     }
 
     kstrtoint(name, 0, converted_value);
-    fffs_create_fibonnaci_dir(dir->i_sb, dentry, mode, 0,
-                              *converted_value);
+
+    fibonacci_index = calculate_next_fibonacci_2(&f_counter2, *converted_value);
+
+    fffs_create_fibonnaci_dir(dir->i_sb, dentry, mode, fibonacci_index);
 
     return 0;
 }
@@ -344,7 +355,8 @@ static int fffs_mkdir(struct inode * dir, struct dentry *dentry,
 /* não disponivel para o usuario de file system, cria um novo arquivo no meu
  * file system. */
 static struct dentry *fffs_create_file (struct super_block *sb,
-                                        struct dentry *dir, const char *name) {
+                                        struct dentry *dir,
+                                        const char *name) {
 
   struct dentry *dentry;
   struct inode *inode;
@@ -355,10 +367,6 @@ static struct dentry *fffs_create_file (struct super_block *sb,
   qname.hash = full_name_hash(name, qname.len);
 
   dentry = d_alloc(dir, &qname);
-
-  //inode = fffs_create_inode(sb, S_IFREG | 0777);
-  //  inode->i_fop = &fffs_file_operations;
-  //  inode->i_op = &fffs_file_inode_operations;
 
   inode = fffs_create_inode(sb,  S_IFREG | 0777);
 
