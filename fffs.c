@@ -20,31 +20,56 @@
 #include <linux/module.h>
 #include <linux/pagemap.h>
 #include <linux/fs.h>
-
-MODULE_LICENSE("GPL");
-MODULE_AUTHOR("Fernando Ferraz");
+#include <linux/vfs.h>
+#include <linux/sched.h>
+#include <asm/current.h>
+#include <asm/uaccess.h>
 
 /* seguindo outros exemplos que vi, é só adicionar um valor aleatório. */
+
 #define FFFS_MAGIC 0xFF1234
+
+static int inode_number;
+
+const struct inode_operations fffs_file_inode_operations = {
+    .getattr    = simple_getattr,
+};
+
+/* inicializando operações de super_block */
+static struct super_operations fffs_super_operations = {
+  .statfs	= simple_statfs,
+  .drop_inode	= generic_delete_inode,
+};
 
 /* armazeno nesta struct as variaveis necessárias para calcular fibonacci. */
 struct fibonacci_counter {
   int fibonacci_index;
   int fibonacci_last;
+  int fibonacci_last2;
   int fibonacci_current;
 };
 
 static struct fibonacci_counter f_counter = {
-  .fibonacci_index = 0,
-  .fibonacci_last = 0,
-  .fibonacci_current = 0,
+   .fibonacci_index = 0,
+   .fibonacci_last = 0,
+   .fibonacci_last2 = 0,
+   .fibonacci_current = 0,
 };
 
-/* inicializando operações de super_block */
-static struct super_operations fffs_super_operations = {
-  .statfs		= simple_statfs,
-  .drop_inode	= generic_delete_inode,
-};
+//static int make_fibonacci_dir(struct super_block *sb,
+//                              struct inode* parent_inode,
+//                              int fibonacci_index, int current_number) {
+
+//  struct inode* inode;
+
+//  if (current_number == 0 and fibonacci_index == 0) {
+//    return 0;
+//  }
+
+//  inode = fffs_create_inode(sb, S_IFDIR | 0777);
+
+//  return 0;
+//}
 
 /* calcula fibonacci baseado nos valores contidos em fibonacci_counter.
  * está sem otimização nenhuma, no caso eu só queria ver funcionando :P */
@@ -87,7 +112,7 @@ static int fffs_open(struct inode *inode, struct file *filp) {
   return 0;
 }
 
-/* disponivel para o usuário, lê um arquivo no file system (atualmente fixo
+/*lê um arquivo no file system (atualmente fixo
  *para o meu gerador de fibonacci) */
 static ssize_t fffs_read_file(struct file *filp, char *buf,
                               size_t count, loff_t *offset) {
@@ -103,8 +128,9 @@ static ssize_t fffs_read_file(struct file *filp, char *buf,
   fibonacci_pt = (struct fibonacci_counter*)filp->private_data;
   calculate_next_fibonacci(fibonacci_pt);
 
-  len = snprintf(return_string, 25, "%d\n", fibonacci_pt->fibonacci_current);
+  len = snprintf(return_string, 25, "value: %d\n", fibonacci_pt->fibonacci_current);
 
+  //adicionando esta checagem pro futuro...
   if (count > len - *offset) {
     count = len;
   }
@@ -115,9 +141,10 @@ static ssize_t fffs_read_file(struct file *filp, char *buf,
 
   *offset += count;
   return count;
+
 }
 
-/* disponivel para o usuario, escreve em um arquivo no file system
+/* escreve em um arquivo no file system
  *(atualmente fixo para o meu gerador de fibonacci) */
 static ssize_t fffs_write_file(struct file *filp, const char *buf,
                                size_t count, loff_t *offset) {
@@ -169,28 +196,115 @@ static ssize_t fffs_write_file(struct file *filp, const char *buf,
   } while (true);
 
   return count;
+
 }
 
-/* não disponivel pra o usuario de file system, cria um novo inode para o meu
- * file system. */
-static struct inode *fffs_create_inode(struct super_block *sb, int mode) {
-
-  struct inode *ret = new_inode(sb);
-
-  ret->i_mode = mode;
-  ret->i_uid = ret->i_gid = 0;
-  ret->i_blocks = 0;
-  ret->i_atime = ret->i_mtime = ret->i_ctime = CURRENT_TIME;
-
-  return ret;
-}
-
-/* inicializando struct contendo as operações de arquivo implementadas. */
-static struct file_operations fffs_file_ops = {
+static struct file_operations fffs_file_operations = {
     .open	= fffs_open,
     .read 	= fffs_read_file,
     .write      = fffs_write_file,
 };
+
+static int fffs_mkdir(struct inode * dir, struct dentry *dentry,
+        int mode);
+
+static struct inode_operations fffs_dir_inode_operations = {
+    .lookup     = simple_lookup,
+    .mkdir      = fffs_mkdir,
+};
+
+struct inode * fffs_create_inode(struct super_block *sb, int mode) {
+
+  struct inode * inode = new_inode(sb);
+
+  if (inode) {
+      inode->i_mode = mode;
+      inode->i_uid = current->cred->fsuid;
+      inode->i_gid = current->cred->fsgid;
+      //inode->i_blocks = 0;
+      inode->i_atime = inode->i_mtime = inode->i_ctime = CURRENT_TIME;
+      //inode->i_ino = ++inode_number;
+      /* G: Voce esta usando o inode number que foi retornado nessa funcao. Apesar de nao ter nada de errado nisso,
+            isso ignora completamente o inode_number global do islenefs. Entao voce poderia te-lo apagado.
+           -> na verdade eu esqueci de acrescentar a linha acima, agora tem sentido a variável global */
+      switch (mode & S_IFMT) {
+        case S_IFREG:
+          inode->i_op = &fffs_file_inode_operations;
+          inode->i_fop = &fffs_file_operations;
+          break;
+        case S_IFDIR:
+          inode->i_op = &fffs_dir_inode_operations;
+          inode->i_fop = &simple_dir_operations;
+          //inc_nlink(inode);
+          break;
+        }
+    }
+  return inode;
+}
+
+static struct dentry *fffs_create_dir (struct super_block *sb,
+                                       struct dentry *parent,
+                                       int mode,
+                                       int fibonacci_index,
+                                       int fibonnaci_number) {
+
+  struct dentry *dentry;
+  struct inode *inode;
+  struct qstr qname;
+  const char name[5];
+
+  snprintf(&name, 5, "%d", fibonnaci_number);
+
+  qname.name = name;
+  qname.len = strlen (name);
+  qname.hash = full_name_hash(name, qname.len);
+  dentry = d_alloc(parent, &qname);
+  if (! dentry)
+    goto out;
+
+  inode = fffs_create_inode(sb, mode);
+  if (! inode)
+    goto out_dput;
+
+  d_add(dentry, inode);
+  return dentry;
+
+out_dput:
+  dput(dentry);
+out:
+  return 0;
+
+};
+
+static int fffs_mkdir(struct inode * dir, struct dentry *dentry,
+        int mode) {
+
+    struct inode *inode;
+
+    mode |= S_IFDIR;
+
+    inode = fffs_create_inode(dir->i_sb, mode);
+
+    if (inode) {
+        if (dir->i_mode & S_ISGID) {
+            inode->i_gid = dir->i_gid;
+            if (S_ISDIR(mode))
+                inode->i_mode |= S_ISGID;
+        }
+
+        d_instantiate(dentry, inode);
+        //dget(dentry);
+        dir->i_mtime = dir->i_ctime = CURRENT_TIME;
+        //inc_nlink(dir);
+
+    }
+
+    fffs_create_dir(dir->i_sb, dentry, mode, 0, 1);
+    fffs_create_dir(dir->i_sb, dentry, mode, 0, 0);
+
+    return 0;
+}
+
 
 /* não disponivel para o usuario de file system, cria um novo arquivo no meu
  * file system. */
@@ -206,9 +320,15 @@ static struct dentry *fffs_create_file (struct super_block *sb,
   qname.hash = full_name_hash(name, qname.len);
 
   dentry = d_alloc(dir, &qname);
-  inode = fffs_create_inode(sb, S_IFREG | 0777);
 
-  inode->i_fop = &fffs_file_ops;
+  //inode = fffs_create_inode(sb, S_IFREG | 0777);
+  //  inode->i_fop = &fffs_file_operations;
+  //  inode->i_op = &fffs_file_inode_operations;
+
+  inode = fffs_create_inode(sb,  S_IFREG | 0777);
+
+  inode->i_blocks = 0;
+  inode->i_uid = inode->i_gid = 0;
   inode->i_private = &f_counter;
 
   d_add(dentry, inode);
@@ -229,7 +349,7 @@ static int fffs_fill_super(struct super_block *sb, void *data, int silent) {
   sb->s_op = &fffs_super_operations;
 
   root = fffs_create_inode(sb, S_IFDIR | 0777);
-  root->i_op = &simple_dir_inode_operations;
+  root->i_op = &fffs_dir_inode_operations;
   root->i_fop = &simple_dir_operations;
 
   root_dentry = d_make_root(root);
@@ -239,6 +359,7 @@ static int fffs_fill_super(struct super_block *sb, void *data, int silent) {
 
   return 0;
 }
+
 
 /* assassino de superblocos :P */
 static void fffs_kill_sb(struct super_block *sb) {
@@ -257,13 +378,16 @@ static struct file_system_type fffs_fs_type = {
 //  .owner 	= THIS_MODULE,
   .name		= "fffs",
   .mount	= fffs_mount,
-  .kill_sb	= fffs_kill_sb,
+  .kill_sb	= fffs_kill_sb
 };
 
 /* chamada na inicialização do modulo */
 static int __init fffs_init(void) {
   return register_filesystem(&fffs_fs_type);
 }
+
+MODULE_LICENSE("GPL");
+MODULE_AUTHOR("Fernando Ferraz");
 
 /* declarando a funcção de inicialização do lo de kernel */
 module_init(fffs_init)
