@@ -30,7 +30,7 @@
 
 #define FFFS_MAGIC 0xFF1234
 
-//static int inode_number;
+static int inode_count = 0;
 
 const struct inode_operations fffs_file_inode_operations = {
     .getattr    = simple_getattr,
@@ -233,6 +233,7 @@ struct inode * fffs_create_inode(struct super_block *sb, int mode) {
 
   if (inode) {
       inode->i_mode = mode;
+      inode->i_ino = ++inode_count;
       inode->i_uid = current->cred->fsuid;
       inode->i_gid = current->cred->fsgid;
       inode->i_atime = inode->i_mtime = inode->i_ctime = CURRENT_TIME;
@@ -245,6 +246,7 @@ struct inode * fffs_create_inode(struct super_block *sb, int mode) {
         case S_IFDIR:
           inode->i_op = &fffs_dir_inode_operations;
           inode->i_fop = &simple_dir_operations;
+          inc_nlink(inode);
           break;
         }
     }
@@ -309,9 +311,11 @@ static void fffs_create_fibonnaci_dir(struct super_block *sb,
 
    snprintf((char*)&first_value, 20, "%d", f_counter2[fibonnaci_index - 1]);
    dentry1 = fffs_create_dir(sb, parent, mode, first_value);
+   //inc_nlink(inode_parent);
 
    snprintf((char*)&second_value, 20, "%d", f_counter2[fibonnaci_index - 2]);
    dentry2 = fffs_create_dir(sb, parent, mode, second_value);
+   //inc_nlink(inode_parent);
 
    fffs_create_fibonnaci_dir(sb, dentry1, mode, fibonnaci_index - 1);
    //printk("fffs_create_fibonnaci_dir - %d\n", fibonnaci_index - 1);
@@ -340,11 +344,13 @@ static int fffs_mkdir(struct inode * dir, struct dentry *dentry,
 
         d_instantiate(dentry, inode);
         dir->i_mtime = dir->i_ctime = CURRENT_TIME;
+        inc_nlink(dir);
     }
 
     kstrtoint(name, 0, converted_value);
 
-    fibonacci_index = calculate_next_fibonacci_2(&f_counter2, *converted_value);
+    fibonacci_index = calculate_next_fibonacci_2(&f_counter2,
+                                                 *converted_value);
 
     fffs_create_fibonnaci_dir(dir->i_sb, dentry, mode, fibonacci_index);
 
