@@ -18,6 +18,7 @@ FFFS - Fernando Ferraz File System :P
                   no arquivo fibonacci.
      - write_file(): verifica se valor é um numero fibonacci, caso
                    verdadeiro o valor é armazenado.
+     - mkdir():    Expande um determinado número de fibonacci em uma árvore binária, até os seeds 1 e 0.
 
 
 * Instruções
